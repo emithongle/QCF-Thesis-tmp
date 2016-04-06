@@ -9,6 +9,8 @@ from sknn.mlp import Classifier, Layer, MultiLayerPerceptron
 import numpy as np
 import xlsxwriter
 
+from itertools import combinations
+
 from sklearn.metrics import roc_auc_score
 from roc_1 import calU, calVUS_1, calVUS_2
 
@@ -69,22 +71,26 @@ def getScore(type='', y_true = [], y_score = []):
 
     return None
 
+def getFeaturesFromCombination(X, cb):
+    return np.asarray([[x[i] for i in list(cb)] for x in X])
 
 folder = 'results/'
 rundate = '20160221/'
 
 methods = {'1': 'random_forest',
-           '2': 'neuron_network',
+           '2': 'neuron_network'
            #'3': 'SVC',
-           '4': 'Linear Discriminant Analysis',
-           '5': 'Quadratic Discriminant Analysis',
-           '6': 'AdaBoost',
-           '7': 'extra_trees_classifier',
-           '8': 'gradient_boosting_classifier'}
+           # '4': 'Linear Discriminant Analysis',
+           # '5': 'Quadratic Discriminant Analysis',
+           # '6': 'AdaBoost',
+           # '7': 'extra_trees_classifier',
+           # '8': 'gradient_boosting_classifier'
+           }
 
 # methods = {'1': 'random_forest'}
 
-datas = [0, 1, 2]
+# datas = [0, 1, 2]
+datas = [0]
 
 scores = {# '1': 'ROC',   # Recheck
           '2': 'AUC',   # Recheck
@@ -103,33 +109,42 @@ for data_id in datas:
         fd = method_id + '. ' + methods[method_id] + '/'
         print(' - Model :', methods[method_id])
         workbook = xlsxwriter.Workbook(folder + rundate + fd + str(data_id) + '.xlsx')
-        data = [['#', 'Accuracy', 'AUC', 'U', 'VUS_1', 'VUS_2']]
+        data = [['#', 'Combination', 'Accuracy', 'AUC', 'U', 'VUS_1', 'VUS_2']]
 
         for i in range(number_of_test):
             print('   + ', methods[method_id], ' - test ', i, '...')
 
             X, y = np.append(X_0.tolist(), X_1.tolist(), axis=0), y_0 + y_1
-            X_train, X_test, y_train, y_test = store.randomData(X, y)
 
-            clf = buildClassifier(methods[method_id])
+            cbs = []
+            for k in range(X.shape[1]):
+                cbs += combinations(range(X.shape[1]), k + 1)
 
-            clf.fit(X_train, np.asarray(y_train))
-            y_hat = clf.predict(X_test)
-            y_score = clf.predict_proba(X_test)
+            for z, cb in zip(range(len(cbs)), cbs):
+                print('   -> Combination ' + str(z))
+                _X = getFeaturesFromCombination(X, cb)
+                X_train, X_test, y_train, y_test = store.randomData(_X, y)
 
-            score = accuracy_score(y_test, y_hat)
-            print('--> Done: ', score)
-            data.append(
-                [
-                    i,
-                    score,
-                    # getScore('ROC', y_test, y_hat),
-                    getScore('AUC', y_test, y_hat),
-                    getScore('U', y_test, y_score),
-                    getScore('VUS_1', y_test, y_hat),
-                    getScore('VUS_2', y_test, y_score),
-                ]
-            )
+                clf = buildClassifier(methods[method_id])
+
+                clf.fit(X_train, np.asarray(y_train))
+                y_hat = clf.predict(X_test)
+                y_score = clf.predict_proba(X_test)
+
+                score = accuracy_score(y_test, y_hat)
+                print('--> Done: ', score)
+                data.append(
+                    [
+                        i,
+                        str(list(cb)),
+                        score,
+                        # getScore('ROC', y_test, y_hat),
+                        getScore('AUC', y_test, y_hat),
+                        getScore('U', y_test, y_score),
+                        getScore('VUS_1', y_test, y_hat),
+                        getScore('VUS_2', y_test, y_score),
+                    ]
+                )
 
         writeSheet(workbook.add_worksheet(methods[method_id]), data)
         workbook.close()
